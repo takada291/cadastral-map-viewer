@@ -1,10 +1,10 @@
 {
-  "short_name": "林業ナビ",
-  "name": "林業現地確認ナビ PWA",
+  "short_name": "公図閲覧",
+  "name": "公図閲覧",
   "icons": [
     {
-      "src": "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-      "sizes": "64x64",
+      "src": "icon.png",
+      "sizes": "192x192",
       "type": "image/png"
     }
   ],
