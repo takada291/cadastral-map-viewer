@@ -13,74 +13,156 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #f4f5f7; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: sans-serif; background: #f4f5f7; }
+        #map { height: 100%; width: 100%; z-index: 1; }
         
         /* 上部コントロールパネル */
-        .control-panel {
-            position: absolute; top: 10px; left: 10px; right: 10px;
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
             background: rgba(255, 255, 255, 0.95);
-            padding: 12px; border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-            z-index: 1000; display: flex; flex-direction: column; gap: 8px;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            width: 280px;
+            box-sizing: border-box;
         }
-        .row { display: flex; gap: 8px; align-items: center; }
         
-        /* UIパーツのサイズ調整 */
+        /* 1行目（タイトルと系選択） */
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        h1 { font-size: 16px; margin: 0; color: #333; font-weight: bold; }
         select {
-            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
-            background: white; height: 40px; box-sizing: border-box;
-            flex: 0 0 80px; /* 第6系専用に幅を固定 */
+            padding: 4px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px;
+            background: white; height: 30px; box-sizing: border-box; width: 140px;
         }
+
+        /* 2行目（ファイル選択） */
         input[type="file"] {
-            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
-            background: white; height: 40px; box-sizing: border-box;
-            flex: 1; /* 残りの幅をすべて使う */
+            width: 100%; font-size: 12px; padding: 4px 0;
         }
-        button {
-            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
-            flex: 1; height: 40px; box-sizing: border-box;
-            background: #2e7d32; color: white; border: none; font-weight: bold; cursor: pointer;
-        }
-        button:active { background: #1b5e20; }
         
-        /* 位置情報表示用ステータス */
+        /* 読込ステータス表示（左下） */
         #status-bar {
-            position: absolute; bottom: 20px; left: 10px; right: 10px;
-            background: rgba(0, 0, 0, 0.75); color: white; padding: 8px 12px;
-            border-radius: 6px; font-size: 12px; z-index: 1000; text-align: center;
-            pointer-events: none;
+            position: absolute; bottom: 25px; left: 10px; z-index: 1000;
+            background: rgba(0, 0, 0, 0.7); color: white; padding: 6px 12px;
+            border-radius: 6px; font-size: 12px; pointer-events: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        /* GPSボタン（右下） */
+        #gps-btn {
+            position: absolute;
+            bottom: 25px;
+            right: 15px;
+            z-index: 1000;
+            background: white;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #gps-btn.active { color: white; background: #007bff; }
+
+        /* 現在地座標表示（下部中央） */
+        #coord-display {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            display: none; 
+            pointer-events: none; 
+            white-space: nowrap;
+        }
+
+        /* Leafletの標準コントロールをGPSボタンの上に押し上げる */
+        .leaflet-bottom.leaflet-right {
+            margin-bottom: 80px !important;
+        }
+        
+        /* ポリゴンのラベル（地番）用 */
+        .polygon-label {
+            background: transparent; border: none; box-shadow: none; font-weight: bold; font-size: 12px; color: #333; text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white;
         }
     </style>
 </head>
 <body>
 
-    <div class="control-panel">
-        <div class="row">
+    <div id="controls">
+        <div class="header-row">
+            <h1>公図閲覧v1.2</h1>
             <select id="zone-select">
-                <option value="6" selected>第6系</option>
+                <option value="1">第1系 (長崎・福岡等)</option>
+                <option value="2">第2系 (熊本・鹿児島等)</option>
+                <option value="3">第3系 (山口・広島等)</option>
+                <option value="4">第4系 (四国地方等)</option>
+                <option value="5">第5系 (兵庫・岡山等)</option>
+                <option value="6" selected>第6系 (福井・近畿等)</option>
+                <option value="7">第7系 (石川・愛知等)</option>
+                <option value="8">第8系 (新潟・長野等)</option>
+                <option value="9">第9系 (関東地方等)</option>
+                <option value="10">第10系 (東北地方等)</option>
+                <option value="11">第11系 (北海道西部等)</option>
+                <option value="12">第12系 (北海道中部等)</option>
+                <option value="13">第13系 (北海道東部等)</option>
+                <option value="14">第14系 (小笠原諸島)</option>
+                <option value="15">第15系 (沖縄本島等)</option>
+                <option value="16">第16系 (先島諸島)</option>
+                <option value="17">第17系 (大東諸島)</option>
+                <option value="18">第18系 (硫黄島)</option>
+                <option value="19">第19系 (南鳥島)</option>
             </select>
-            <input type="file" id="file-input" accept=".geojson,.json" />
         </div>
-        <div class="row">
-            <button id="gps-focus-btn" onclick="focusCurrentLocation()">現在地へフォーカス</button>
-        </div>
+        <input type="file" id="file-input" accept=".geojson,.json" />
     </div>
 
+    <div id="status-bar">データ未読込</div>
+    <div id="coord-display">緯度: -- / 経度: --</div>
+    <div id="gps-btn" onclick="toggleGPS()">📍</div>
+    
     <div id="map"></div>
-    <div id="status-bar">GPS読込中... / データ未読込</div>
 
     <script>
-        // 1. 地図の初期化
-        const map = L.map('map', { zoomControl: false }).setView([36.0, 136.0], 9);
+        // --- 1. Service Worker ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('sw.js').then(function(reg) {
+                    console.log('SW Registered: ', reg.scope);
+                }).catch(function(err) {
+                    console.log('SW Failed: ', err);
+                });
+            });
+        }
+
+        // --- 2. Map & Base Layers Setup ---
+        const map = L.map('map', { zoomControl: false }).setView([36.064, 136.220], 14); // 初期位置は福井県庁付近
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // 背景地図タイルの定義
         const chiriinChikei = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-            attribution: '&copy; 国土地理院 (標準地図)'
+            attribution: '&copy; 国土地理院 (標準地図)', maxZoom: 18
         });
         const chiriinOrtho = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/ort/{z}/{x}/{y}.jpg', {
-            attribution: '&copy; 国土地理院 (オルソ航空写真)'
+            attribution: '&copy; 国土地理院 (オルソ)', maxZoom: 18
         });
 
         chiriinChikei.addTo(map);
@@ -91,12 +173,17 @@
         };
         L.control.layers(baseMaps, null, { position: 'bottomright' }).addTo(map);
 
-        // 2. 平面直角座標系の原点緯度経度データ (第6系のみ使用しますが定義は残します)
+        // --- 3. 平面直角座標系の原点緯度経度データ (1〜19系) ---
         const zoneOrigins = {
-            6: [36.0, 136.0]
+            1: [33.0, 129.5],  2: [33.0, 131.0],  3: [36.0, 132.166666667],
+            4: [33.0, 133.5],  5: [33.0, 134.333333333], 6: [36.0, 136.0],
+            7: [36.0, 137.166666667], 8: [36.0, 138.5], 9: [36.0, 139.833333333],
+            10: [40.0, 140.833333333], 11: [40.0, 142.0], 12: [44.0, 142.25],
+            13: [44.0, 144.25], 14: [26.0, 142.0], 15: [26.0, 127.5],
+            16: [26.0, 124.0], 17: [26.0, 131.0], 18: [20.0, 136.0], 19: [26.0, 154.0]
         };
 
-        // 3. GeoJSON読み込みと座標変換
+        // --- 4. GeoJSON読込と座標変換 ---
         let geojsonLayer = null;
         document.getElementById('file-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -138,15 +225,14 @@
                             const chiban = props['地番'] || props['chiban'] || props['block_id'] || props['movable_attribute_chiban'] || '不明';
                             
                             layer.bindPopup(`<b>地番: ${chiban}</b><br><small>${JSON.stringify(props)}</small>`);
-                            layer.bindTooltip(chiban, { permanent: false, direction: 'center', className: 'polygon-label' });
+                            layer.bindTooltip(chiban, { permanent: true, direction: 'center', className: 'polygon-label' });
                         }
                     }).addTo(map);
 
-                    // 読み込んだデータに画面をフィットさせる
                     const bounds = geojsonLayer.getBounds();
                     map.fitBounds(bounds);
                     
-                    updateStatusBar(`データ読込成功: ${file.name}`);
+                    document.getElementById('status-bar').innerText = `読込成功: ${file.name}`;
 
                 } catch (err) {
                     alert("ファイルのパースまたは変換に失敗しました: " + err.message);
@@ -155,82 +241,95 @@
             reader.readAsText(file);
         });
 
-        // 4. GPSのバックグラウンド取得とフォーカス処理
-        let watchId = null;
-        let currentMarker = null;
-        let accuracyCircle = null;
-        let currentLat = null;
-        let currentLng = null;
-        let isFirstLocation = true; // 初回フォーカス判定用フラグ
+        // --- 5. GPS Logic (林小班図移植版) ---
+        let gpsMarker = null;
+        let gpsWatchId = null;
 
-        // ステータスバーのテキスト更新用ヘルパー（読み込みデータ名とGPS状況を併記するため）
-        let fileStatusText = "データ未読込";
-        function updateStatusBar(fileText = null, gpsText = null) {
-            if(fileText) fileStatusText = fileText;
-            const gpsInfo = (currentLat && currentLng) ? `GPS取得中` : `GPS検索中...`;
-            document.getElementById('status-bar').innerText = `${gpsInfo} / ${fileStatusText}`;
+        // 現在地にフォーカスする関数
+        function focusOnLocation(lat, lng) {
+            map.setView([lat, lng], 16);
         }
 
-        // 起動時に自動でGPS取得開始
-        function initGPS() {
-            if (!navigator.geolocation) {
-                alert("お使いの端末はGPSに対応していません。");
-                return;
-            }
+        function toggleGPS() {
+            const btn = document.getElementById('gps-btn');
+            const coordDisplay = document.getElementById('coord-display');
             
-            watchId = navigator.geolocation.watchPosition(
-                function(position) {
-                    currentLat = position.coords.latitude;
-                    currentLng = position.coords.longitude;
-                    const accuracy = position.coords.accuracy;
-
-                    // マーカーと円の描画・更新
-                    if (currentMarker) {
-                        currentMarker.setLatLng([currentLat, currentLng]);
-                        accuracyCircle.setLatLng([currentLat, currentLng]).setRadius(accuracy);
-                    } else {
-                        currentMarker = L.marker([currentLat, currentLng]).addTo(map).bindPopup("現在地");
-                        accuracyCircle = L.circle([currentLat, currentLng], { radius: accuracy, color: '#137cbd', fillOpacity: 0.15 }).addTo(map);
-                    }
-
-                    // 初回座標取得時のみ、自動でその場所へフォーカスする
-                    if (isFirstLocation) {
-                        map.setView([currentLat, currentLng], 16);
-                        isFirstLocation = false;
-                    }
-
-                    updateStatusBar();
-                },
-                function(error) {
-                    console.warn("GPSエラー:", error.message);
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-
-        // 「現在地へフォーカス」ボタンを押したときの処理
-        function focusCurrentLocation() {
-            if (currentLat !== null && currentLng !== null) {
-                // ズームレベル18（かなり拡大）で現在地へ移動
-                map.setView([currentLat, currentLng], 18);
+            if (gpsWatchId) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+                gpsWatchId = null;
+                btn.classList.remove('active');
+                if (gpsMarker) map.removeLayer(gpsMarker);
+                gpsMarker = null;
+                coordDisplay.style.display = 'none';
             } else {
-                alert("GPS座標を取得中です。空が見える場所で少しお待ちください。");
+                if (!navigator.geolocation) {
+                    alert("お使いの端末はGPSに対応していません。");
+                    return;
+                }
+
+                btn.classList.add('active');
+                coordDisplay.style.display = 'block';
+                coordDisplay.innerText = "GPS信号を検索中...";
+                
+                const gpsOptions = {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,        
+                    timeout: 10000        
+                };
+
+                gpsWatchId = navigator.geolocation.watchPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        
+                        coordDisplay.innerText = `緯度: ${lat.toFixed(6)} / 経度: ${lng.toFixed(6)}`;
+
+                        if (!gpsMarker) {
+                            gpsMarker = L.circleMarker([lat, lng], {
+                                color: 'white',
+                                weight: 4,
+                                fillColor: 'red',
+                                fillOpacity: 1,
+                                radius: 12
+                            }).addTo(map);
+                            // GPSボタンを押して初めて位置を取得したときにフォーカス
+                            focusOnLocation(lat, lng);
+                        } else {
+                            gpsMarker.setLatLng([lat, lng]);
+                        }
+                    },
+                    (err) => {
+                        if (err.code !== 3) {
+                            alert("GPSエラー: " + err.message);
+                            btn.classList.remove('active');
+                            coordDisplay.style.display = 'none';
+                        } else {
+                            coordDisplay.innerText = "GPS信号を再取得中...";
+                        }
+                    },
+                    gpsOptions 
+                );
             }
         }
 
-        // 画面読み込み完了と同時にGPS起動
-        window.addEventListener('load', initGPS);
-
-        // 5. サービスワーカーの登録
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('sw.js').then(function(reg) {
-                    console.log('ServiceWorkerの登録に成功しました: ', reg.scope);
-                }, function(err) {
-                    console.log('ServiceWorkerの登録に失敗しました: ', err);
-                });
-            });
+        // --- 6. 起動時のバックグラウンドGPS取得 (1回のみ) ---
+        function initLocation() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        focusOnLocation(pos.coords.latitude, pos.coords.longitude);
+                    },
+                    (err) => {
+                        console.log("起動時の位置情報取得に失敗しました", err);
+                    },
+                    { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 } 
+                );
+            }
         }
+        
+        // ページ読み込み完了時に実行
+        window.addEventListener('load', initLocation);
+
     </script>
 </body>
 </html>
