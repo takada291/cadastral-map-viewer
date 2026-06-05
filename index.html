@@ -25,11 +25,21 @@
             z-index: 1000; display: flex; flex-direction: column; gap: 8px;
         }
         .row { display: flex; gap: 8px; align-items: center; }
-        select, input[type="file"], button {
-            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; flex: 1;
+        
+        /* UIパーツのサイズ調整 */
+        select {
+            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
             background: white; height: 40px; box-sizing: border-box;
+            flex: 0 0 80px; /* 第6系専用に幅を固定 */
+        }
+        input[type="file"] {
+            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
+            background: white; height: 40px; box-sizing: border-box;
+            flex: 1; /* 残りの幅をすべて使う */
         }
         button {
+            padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;
+            flex: 1; height: 40px; box-sizing: border-box;
             background: #2e7d32; color: white; border: none; font-weight: bold; cursor: pointer;
         }
         button:active { background: #1b5e20; }
@@ -48,38 +58,20 @@
     <div class="control-panel">
         <div class="row">
             <select id="zone-select">
-                <option value="1">第1系 (長崎・佐賀・福岡など)</option>
-                <option value="2">第2系 (福岡・熊本・大分・鹿児島など)</option>
-                <option value="3">第3系 (山口・島根・広島など)</option>
-                <option value="4">第4系 (香川・愛媛・高知・徳島など)</option>
-                <option value="5">第5系 (兵庫・鳥取・岡山など)</option>
-                <option value="6" selected>第6系 (福井・滋賀・京都・大阪・和歌山・三重など)</option>
-                <option value="7">第7系 (石川・富山・岐阜・愛知など)</option>
-                <option value="8">第8系 (新潟・長野・山梨・静岡など)</option>
-                <option value="9">第9系 (東京・神奈川・千葉・埼玉・茨城・栃木・群馬・福島など)</option>
-                <option value="10">第10系 (青森·秋田·岩手・山形・宮城など)</option>
-                <option value="11">第11系 (北海道：函館・後志など)</option>
-                <option value="12">第12系 (北海道：上川・留萌・宗谷・空知・石狩・胆振・日高など)</option>
-                <option value="13">第13系 (北海道：網走・根室・釧路・十勝など)</option>
-                <option value="14">第14系 (小笠原諸島など)</option>
-                <option value="15">第15系 (沖縄：本島地域など)</option>
-                <option value="16">第16系 (沖縄：先島諸島など)</option>
-                <option value="17">第17系 (沖縄：大東諸島など)</option>
-                <option value="18">第18系 (硫黄島など)</option>
-                <option value="19">第19系 (南鳥島など)</option>
+                <option value="6" selected>第6系</option>
             </select>
-            <button id="gps-btn" onclick="toggleGPS()">GPS開始</button>
+            <input type="file" id="file-input" accept=".geojson,.json" />
         </div>
         <div class="row">
-            <input type="file" id="file-input" accept=".geojson,.json" />
+            <button id="gps-focus-btn" onclick="focusCurrentLocation()">現在地へフォーカス</button>
         </div>
     </div>
 
     <div id="map"></div>
-    <div id="status-bar">GPS未作動 / データ未読込</div>
+    <div id="status-bar">GPS読込中... / データ未読込</div>
 
     <script>
-        // 1. 地図の初期化（デフォルトは地形図）
+        // 1. 地図の初期化
         const map = L.map('map', { zoomControl: false }).setView([36.0, 136.0], 9);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -91,24 +83,17 @@
             attribution: '&copy; 国土地理院 (オルソ航空写真)'
         });
 
-        // デフォルト表示
         chiriinChikei.addTo(map);
 
-        // レイヤー切り替えコントロールを配置
         const baseMaps = {
             "地形図（標準）": chiriinChikei,
             "オルソ写真": chiriinOrtho
         };
         L.control.layers(baseMaps, null, { position: 'bottomright' }).addTo(map);
 
-        // 2. 平面直角座標系の原点緯度経度データ (1〜19系)
+        // 2. 平面直角座標系の原点緯度経度データ (第6系のみ使用しますが定義は残します)
         const zoneOrigins = {
-            1: [33.0, 129.5],  2: [33.0, 131.0],  3: [36.0, 132.166666667],
-            4: [33.0, 133.5],  5: [33.0, 134.333333333], 6: [36.0, 136.0],
-            7: [36.0, 137.166666667], 8: [36.0, 138.5], 9: [36.0, 139.833333333],
-            10: [40.0, 140.833333333], 11: [40.0, 142.0], 12: [44.0, 142.25],
-            13: [44.0, 144.25], 14: [26.0, 142.0], 15: [26.0, 127.5],
-            16: [26.0, 124.0], 17: [26.0, 131.0], 18: [20.0, 136.0], 19: [26.0, 154.0]
+            6: [36.0, 136.0]
         };
 
         // 3. GeoJSON読み込みと座標変換
@@ -120,7 +105,6 @@
             const selectedZone = document.getElementById('zone-select').value;
             const origin = zoneOrigins[selectedZone];
             
-            // Proj4の定義（平面直角座標系からWGS84への変換用）
             const jgd2011 = `+proj=tmerc +lat_0=${origin[0]} +lon_0=${origin[1]} +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs`;
             const wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs";
 
@@ -129,38 +113,30 @@
                 try {
                     let geoData = JSON.parse(evt.target.result);
 
-                    // 各座標を変換する再帰関数
                     function convertCoords(coords) {
                         if (typeof coords[0] === 'number') {
-                            // 民間サイトや登記データは通常[Y(東郷), X(北郷)]の順で格納されています
                             const y = coords[0]; 
                             const x = coords[1];
-                            // 平面直角座標(X,Y)を緯度経度に変換 -> 返り値は [経度, 緯度]
                             const converted = proj4(jgd2011, wgs84, [y, x]);
-                            coords[0] = converted[0]; // Longitude
-                            coords[1] = converted[1]; // Latitude
+                            coords[0] = converted[0]; 
+                            coords[1] = converted[1]; 
                         } else {
                             coords.forEach(convertCoords);
                         }
                     }
 
-                    // 全フィーチャの座標をその場で書き換え
                     geoData.features.forEach(feature => {
                         convertCoords(feature.geometry.coordinates);
                     });
 
-                    // 既存のレイヤーがあれば削除
                     if (geojsonLayer) map.removeLayer(geojsonLayer);
 
-                    // 地図に追加
                     geojsonLayer = L.geoJSON(geoData, {
                         style: { color: '#ff3388', weight: 3, fillOpacity: 0.1 },
                         onEachFeature: function (feature, layer) {
-                            // 地番（chiban、地番、block_id等の代表的なプロパティ名を自動検索）
                             const props = feature.properties || {};
                             const chiban = props['地番'] || props['chiban'] || props['block_id'] || props['movable_attribute_chiban'] || '不明';
                             
-                            // ポップアップと恒常的なツールチップの両方を設定（見やすさ重視）
                             layer.bindPopup(`<b>地番: ${chiban}</b><br><small>${JSON.stringify(props)}</small>`);
                             layer.bindTooltip(chiban, { permanent: false, direction: 'center', className: 'polygon-label' });
                         }
@@ -170,7 +146,7 @@
                     const bounds = geojsonLayer.getBounds();
                     map.fitBounds(bounds);
                     
-                    document.getElementById('status-bar').innerText = `データ読込成功: ${file.name} (第${selectedZone}系)`;
+                    updateStatusBar(`データ読込成功: ${file.name}`);
 
                 } catch (err) {
                     alert("ファイルのパースまたは変換に失敗しました: " + err.message);
@@ -179,53 +155,71 @@
             reader.readAsText(file);
         });
 
-        // 4. GPS現在地トラッキング
+        // 4. GPSのバックグラウンド取得とフォーカス処理
         let watchId = null;
         let currentMarker = null;
         let accuracyCircle = null;
+        let currentLat = null;
+        let currentLng = null;
+        let isFirstLocation = true; // 初回フォーカス判定用フラグ
 
-        function toggleGPS() {
-            const btn = document.getElementById('gps-btn');
-            if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-                btn.innerText = "GPS開始";
-                btn.style.background = "#2e7d32";
-                if (currentMarker) map.removeLayer(currentMarker);
-                if (accuracyCircle) map.removeLayer(accuracyCircle);
-                document.getElementById('status-bar').innerText = "GPS停止中";
+        // ステータスバーのテキスト更新用ヘルパー（読み込みデータ名とGPS状況を併記するため）
+        let fileStatusText = "データ未読込";
+        function updateStatusBar(fileText = null, gpsText = null) {
+            if(fileText) fileStatusText = fileText;
+            const gpsInfo = (currentLat && currentLng) ? `GPS取得中` : `GPS検索中...`;
+            document.getElementById('status-bar').innerText = `${gpsInfo} / ${fileStatusText}`;
+        }
+
+        // 起動時に自動でGPS取得開始
+        function initGPS() {
+            if (!navigator.geolocation) {
+                alert("お使いの端末はGPSに対応していません。");
+                return;
+            }
+            
+            watchId = navigator.geolocation.watchPosition(
+                function(position) {
+                    currentLat = position.coords.latitude;
+                    currentLng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    // マーカーと円の描画・更新
+                    if (currentMarker) {
+                        currentMarker.setLatLng([currentLat, currentLng]);
+                        accuracyCircle.setLatLng([currentLat, currentLng]).setRadius(accuracy);
+                    } else {
+                        currentMarker = L.marker([currentLat, currentLng]).addTo(map).bindPopup("現在地");
+                        accuracyCircle = L.circle([currentLat, currentLng], { radius: accuracy, color: '#137cbd', fillOpacity: 0.15 }).addTo(map);
+                    }
+
+                    // 初回座標取得時のみ、自動でその場所へフォーカスする
+                    if (isFirstLocation) {
+                        map.setView([currentLat, currentLng], 16);
+                        isFirstLocation = false;
+                    }
+
+                    updateStatusBar();
+                },
+                function(error) {
+                    console.warn("GPSエラー:", error.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        // 「現在地へフォーカス」ボタンを押したときの処理
+        function focusCurrentLocation() {
+            if (currentLat !== null && currentLng !== null) {
+                // ズームレベル18（かなり拡大）で現在地へ移動
+                map.setView([currentLat, currentLng], 18);
             } else {
-                if (!navigator.geolocation) {
-                    alert("お使いの端末はGPSに対応していません。");
-                    return;
-                }
-                btn.innerText = "GPS停止";
-                btn.style.background = "#d32f2f";
-                
-                watchId = navigator.geolocation.watchPosition(
-                    function(position) {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        const accuracy = position.coords.accuracy;
-
-                        document.getElementById('status-bar').innerText = `現在地: 緯度${lat.toFixed(5)} / 経度${lng.toFixed(5)} (誤差: ${accuracy.toFixed(1)}m)`;
-
-                        if (currentMarker) {
-                            currentMarker.setLatLng([lat, lng]);
-                            accuracyCircle.setLatLng([lat, lng]).setRadius(accuracy);
-                        } else {
-                            currentMarker = L.marker([lat, lng]).addTo(map).bindPopup("現在地");
-                            accuracyCircle = L.circle([lat, lng], { radius: accuracy, color: '#137cbd', fillOpacity: 0.15 }).addTo(map);
-                            map.setView([lat, lng], 16); // 初回のみ現在地にズーム
-                        }
-                    },
-                    function(error) {
-                        document.getElementById('status-bar').innerText = `GPSエラー: ${error.message}`;
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
+                alert("GPS座標を取得中です。空が見える場所で少しお待ちください。");
             }
         }
+
+        // 画面読み込み完了と同時にGPS起動
+        window.addEventListener('load', initGPS);
 
         // 5. サービスワーカーの登録
         if ('serviceWorker' in navigator) {
