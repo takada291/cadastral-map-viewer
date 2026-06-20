@@ -12,6 +12,16 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-WXBP6CPKLP"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      // ここも測定IDに書き換えます
+      gtag('config', 'G-WXBP6CPKLP');
+    </script>
+    
     <style>
         body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: sans-serif; background: #f4f5f7; }
         #map { height: 100%; width: 100%; z-index: 1; }
